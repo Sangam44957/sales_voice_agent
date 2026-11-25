@@ -1,25 +1,71 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sales Dashboard</title>
+<title>BrightPath · Sales Dashboard</title>
 <style>
- body{font:14px system-ui,sans-serif;margin:0;background:#f4f5f7;color:#1c1e21}main{max-width:1100px;margin:0 auto;padding:16px}
- table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px #0002;margin-bottom:20px}
- th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #eee;vertical-align:top}th{background:#1e293b;color:#fff}
- .pill{padding:2px 8px;border-radius:99px}.positive{background:#dcfce7}.neutral{background:#e5e7eb}.negative{background:#fee2e2}
- .cards{display:flex;gap:12px;margin-bottom:16px}.k{background:#fff;padding:12px 18px;border-radius:8px;box-shadow:0 1px 3px #0002}.k b{font-size:24px;display:block}
-</style></head><body><main>
-<h2>Sales dashboard <a href="/web/index.html" style="font-size:13px">call UI</a></h2>
-<div class="cards" id="kpi"></div>
-<h3>Leads</h3><table id="leads"></table><h3>Calls &amp; summaries</h3><table id="calls"></table><h3>Slots</h3><table id="slots"></table>
-</main><script>
-// All cell values are inserted with textContent: caller speech is untrusted and must never be parsed as HTML.
-function table(id,cols,rows){const t=document.getElementById(id);t.replaceChildren();const h=t.insertRow();cols.forEach(c=>{const th=document.createElement("th");th.textContent=c[0];h.append(th)});
- rows.forEach(r=>{const tr=t.insertRow();cols.forEach(c=>{const td=tr.insertCell();const v=c[1](r);if(v&&v.pill){const s=document.createElement("span");s.className="pill "+v.pill;s.textContent=v.pill;td.append(s)}else td.textContent=v??""})})}
-const j=u=>fetch(u).then(r=>r.json());
-async function load(){const [L,C,S]=await Promise.all([j("/api/leads"),j("/api/calls"),j("/api/slots")]);
- const k=document.getElementById("kpi");k.replaceChildren();[["Leads",L.length],["Booked",L.filter(l=>l.appointment).length],["Avg score",L.length?Math.round(L.reduce((a,l)=>a+l.score,0)/L.length):0],["Calls",C.length]].forEach(([n,v])=>{const d=document.createElement("div");d.className="k";const b=document.createElement("b");b.textContent=v;d.append(b,n);k.append(d)});
- table("leads",[["Name",r=>r.name],["Phone",r=>r.phone],["Interest",r=>r.interest],["Budget",r=>r.budget],["Timeline",r=>r.timeline],["Score",r=>r.score],["Stage",r=>r.stage],["Appointment",r=>r.appointment],["CRM id",r=>r.crm_id]],L);
- table("calls",[["Started",r=>r.started_at],["Lang",r=>r.language],["Lead",r=>r.name],["Status",r=>r.status],["Sentiment",r=>r.overall_sentiment?{pill:r.overall_sentiment}:""],["Score",r=>r.final_score],["Summary",r=>r.summary],["Next action",r=>r.insights_json?JSON.parse(r.insights_json).next_best_action:""]],C);
- table("slots",[["Slot",r=>r.id],["Time",r=>r.start_time],["Booked",r=>r.is_booked?"yes":"no"]],S)}
+:root{--bg:#f6f3ee;--card:#fffdf9;--ink:#1b1f2a;--mute:#6b6f7a;--line:#e6e0d6;--accent:#0f5c4d;--gold:#b8893b;--pos:#1f7a4d;--neu:#8a8d96;--neg:#b4402f;
+ --shadow:0 1px 2px rgba(27,31,42,.06),0 8px 24px rgba(27,31,42,.06);--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+@media (prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1a1e27;--ink:#f1ede6;--mute:#9aa0ad;--line:#2a2f3b;--accent:#3fb59a;--gold:#d4a85a;--shadow:none}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{max-width:1180px;margin:0 auto;padding:22px 20px 6px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--serif);font-size:24px}.brand small{display:block;font:12px system-ui;color:var(--mute);letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px}
+header a{color:var(--accent);text-decoration:none;font-weight:600}header a:hover{text-decoration:underline}
+.live{font-size:12.5px;color:var(--mute);display:inline-flex;gap:7px;align-items:center;margin-right:18px}.live i{width:8px;height:8px;border-radius:50%;background:var(--pos);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,122,77,.5)}70%{box-shadow:0 0 0 8px rgba(31,122,77,0)}100%{box-shadow:0 0 0 0 rgba(31,122,77,0)}}
+main{max-width:1180px;margin:0 auto;padding:10px 20px 48px;display:grid;gap:18px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}@media(max-width:760px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+.kpi{padding:18px 20px;animation:rise .45s ease both}.kpi:nth-child(2){animation-delay:.06s}.kpi:nth-child(3){animation-delay:.12s}.kpi:nth-child(4){animation-delay:.18s}
+.kpi span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}.kpi b{display:block;font:500 38px/1.15 var(--serif);margin-top:4px}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px}@media(max-width:960px){.grid{grid-template-columns:1fr}}
+section{padding:20px 22px}h2{margin:0 0 14px;font:500 20px var(--serif)}
+.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:620px}
+th{font:600 11.5px system-ui;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);text-align:left;padding:0 10px 10px;border-bottom:1px solid var(--line)}
+td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}tbody tr{transition:background .15s}tbody tr:hover{background:color-mix(in srgb,var(--ink) 4%,transparent)}tr:last-child td{border-bottom:0}
+.name{font-weight:600}.sub{color:var(--mute);font-size:12.5px}
+.bar{display:flex;align-items:center;gap:8px;min-width:110px}.bar div{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.bar span{font-weight:600;width:28px;text-align:right}
+.badge{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line);text-transform:capitalize}
+.booked{background:var(--accent);color:#fff;border-color:var(--accent)}.qualified{border-color:var(--gold);color:var(--gold)}
+.positive{background:color-mix(in srgb,var(--pos) 16%,transparent);color:var(--pos);border-color:transparent}.negative{background:color-mix(in srgb,var(--neg) 16%,transparent);color:var(--neg);border-color:transparent}.neutral{background:color-mix(in srgb,var(--neu) 18%,transparent);color:var(--mute);border-color:transparent}
+.calls{display:grid;gap:12px}.call{padding:14px 16px;border:1px solid var(--line);border-radius:14px;animation:rise .4s ease both}.call p{margin:8px 0 6px}
+.call .top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.slot{padding:9px 12px;border-radius:12px;border:1px solid var(--line);font-size:13px}.slot b{display:block}.slot.taken{opacity:.5;background:repeating-linear-gradient(135deg,transparent 0 6px,var(--line) 6px 7px)}
+.empty{color:var(--mute);padding:20px 0;text-align:center;font-family:var(--serif);font-size:16px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header><div class="brand"><small>BrightPath Academy</small>Sales dashboard</div><div><span class="live"><i></i>Live · updates every 5s</span><a href="/web/index.html">← Call screen</a></div></header>
+<main>
+ <div class="kpis" id="kpi"></div>
+ <div class="grid">
+  <section class="card"><h2>Leads</h2><div class="scroll"><table id="leads"></table></div></section>
+  <section class="card"><h2>Appointment slots</h2><div class="slots" id="slots"></div></section>
+ </div>
+ <section class="card"><h2>Calls &amp; insights</h2><div class="calls" id="calls"></div></section>
+</main>
+<script>
+// Every value goes in via textContent: caller speech is untrusted and must never be parsed as HTML.
+const $=id=>document.getElementById(id),j=u=>fetch(u).then(r=>r.json());
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined&&text!==null)e.textContent=text;return e}
+function badge(text,cls){return el("span","badge "+(cls||text),text)}
+function fmt(t){if(!t)return "";const d=new Date(t.includes("T")?t:t.replace(" ","T"));return isNaN(d)?t:d.toLocaleString([],{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}
+function kpis(L,C){const box=$("kpi");box.replaceChildren();const done=C.filter(c=>c.status==="ended").length;
+ [["Leads",L.length],["Appointments",L.filter(l=>l.appointment).length],["Average score",L.length?Math.round(L.reduce((a,l)=>a+l.score,0)/L.length):0],["Calls completed",done]]
+  .forEach(([n,v])=>{const k=el("div","card kpi");k.append(el("span",null,n),el("b",null,v));box.append(k)})}
+function leads(L){const t=$("leads");t.replaceChildren();const h=t.createTHead().insertRow();["Lead","Interest","Budget","Timeline","Score","Stage","Appointment"].forEach(x=>h.append(el("th",null,x)));
+ const b=t.createTBody();if(!L.length){const td=b.insertRow().insertCell();td.colSpan=7;td.className="empty";td.textContent="No leads yet. Start a call to create one.";return}
+ L.forEach(l=>{const r=b.insertRow();const who=r.insertCell();who.append(el("div","name",l.name||"Unknown"),el("div","sub",l.phone||"no phone"));
+  r.insertCell().textContent=l.interest||"–";r.insertCell().textContent=l.budget||"–";r.insertCell().textContent=l.timeline||"–";
+  const sc=r.insertCell(),bar=el("div","bar"),tr=el("div"),fill=el("i");fill.style.width="0";requestAnimationFrame(()=>fill.style.width=l.score+"%");tr.append(fill);bar.append(tr,el("span",null,l.score));sc.append(bar);
+  r.insertCell().append(badge(l.stage));r.insertCell().textContent=fmt(l.appointment)||"–"})}
+function calls(C){const box=$("calls");box.replaceChildren();if(!C.length){box.append(el("div","empty","No calls yet."));return}
+ C.slice(0,12).forEach(c=>{const d=el("div","call"),top=el("div","top");top.append(el("b",null,(c.name||"Anonymous caller")+" · "+(c.language||"en").toUpperCase()),el("span","sub",fmt(c.started_at)));
+  const tags=el("div");tags.append(badge(c.status,c.status==="ended"?"booked":"neutral"));if(c.overall_sentiment){tags.append(" ",badge(c.overall_sentiment))}if(c.final_score!=null)tags.append(" ",badge("score "+c.final_score,"qualified"));
+  d.append(top,tags);if(c.summary)d.append(el("p",null,c.summary));
+  if(c.insights_json){try{const i=JSON.parse(c.insights_json);if(i.next_best_action)d.append(el("div","sub","Next step: "+i.next_best_action))}catch(e){}}
+  box.append(d)})}
+function slots(S){const box=$("slots");box.replaceChildren();S.forEach(s=>{const d=el("div","slot"+(s.is_booked?" taken":""));d.append(el("b",null,fmt(s.start_time)),el("span","sub",s.is_booked?"Booked":"Free"));box.append(d)})}
+async function load(){try{const [L,C,S]=await Promise.all([j("/api/leads"),j("/api/calls"),j("/api/slots")]);kpis(L,C);leads(L);calls(C);slots(S)}catch(e){}}
 load();setInterval(load,5000);
 </script></body></html>

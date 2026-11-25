@@ -1,58 +1,134 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Sales Voice Agent</title>
+<title>BrightPath · Voice Counsellor</title>
 <style>
- body{font:15px system-ui,sans-serif;margin:0;background:#f4f5f7;color:#1c1e21}
- main{max-width:860px;margin:0 auto;padding:16px;display:grid;gap:12px}
- .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px #0002}
- #log{height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px}
- .msg{padding:8px 12px;border-radius:12px;max-width:80%}.user{background:#dbeafe;align-self:flex-end}.bot{background:#eceff1}
- .meta{font-size:12px;color:#667}button,select,input{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid #bbb}
- button{cursor:pointer;background:#1d4ed8;color:#fff;border:0}button:disabled{background:#9aa}button.rec{background:#dc2626}
- .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pill{padding:2px 10px;border-radius:99px;font-weight:600}
- .positive{background:#dcfce7}.neutral{background:#e5e7eb}.negative{background:#fee2e2}
- #bar{height:10px;background:#e5e7eb;border-radius:5px}#fill{height:100%;width:0;background:#16a34a;border-radius:5px;transition:width .4s}
-</style></head><body><main>
-<div class="card"><h2 style="margin:0 0 8px">AI Sales Voice Agent <a href="/web/dashboard.html" style="font-size:13px">dashboard</a></h2>
- <div class="row">
-  <button id="start">Start call</button>
-  <select id="lang" title="Pin language"><option value="">Auto language</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option></select>
-  <button id="ptt" disabled>🎤 Click to talk</button>
-  <button id="end" disabled style="background:#475569">End call</button>
-  <span id="status" class="meta"></span></div></div>
-<div class="card"><div id="log"></div>
- <form id="tf" class="row" style="margin-top:8px"><input id="txt" placeholder="…or type here (fallback)" style="flex:1" disabled><button disabled id="send">Send</button></form></div>
-<div class="card row"><div>Sentiment: <span id="sent" class="pill neutral">–</span></div><div>Intent: <b id="intent">–</b></div>
- <div style="flex:1;min-width:200px">Lead score: <b id="score">0</b>/100<div id="bar"><div id="fill"></div></div></div>
- <div class="meta">Tools: <span id="tools">–</span> · Sources: <span id="src">–</span></div></div>
-<div class="card" id="summary" hidden></div>
-</main><script>
-const $=id=>document.getElementById(id);let sid=null,rec=null,chunks=[],busy=false;
-function add(who,text){const d=document.createElement("div");d.className="msg "+who;d.textContent=text;$("log").append(d);$("log").scrollTop=1e9}
-function status(t){$("status").textContent=t}
+:root{--bg:#f6f3ee;--card:#fffdf9;--ink:#1b1f2a;--mute:#6b6f7a;--line:#e6e0d6;--accent:#0f5c4d;--accent-ink:#fff;--gold:#b8893b;
+ --pos:#1f7a4d;--neu:#8a8d96;--neg:#b4402f;--shadow:0 1px 2px rgba(27,31,42,.06),0 8px 24px rgba(27,31,42,.06);--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+@media (prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1a1e27;--ink:#f1ede6;--mute:#9aa0ad;--line:#2a2f3b;--accent:#3fb59a;--accent-ink:#0c1511;--gold:#d4a85a;--shadow:none}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{max-width:1080px;margin:0 auto;padding:22px 20px 6px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--serif);font-size:24px;letter-spacing:.2px}.brand small{display:block;font:12px system-ui;color:var(--mute);letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px}
+header a{color:var(--accent);text-decoration:none;font-weight:600;border-bottom:1px solid transparent}header a:hover{border-color:var(--accent)}
+main{max-width:1080px;margin:0 auto;padding:14px 20px 40px;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+.stage{padding:26px 22px 20px;text-align:center}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+#status{margin:6px 0 18px;font-family:var(--serif);font-size:22px;min-height:30px}
+.mic{position:relative;width:96px;height:96px;margin:0 auto 6px;display:grid;place-items:center}
+.mic::before,.mic::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--accent);opacity:0;transform:scale(1)}
+.rec .mic::before{animation:ring 1.6s ease-out infinite}.rec .mic::after{animation:ring 1.6s ease-out .8s infinite}
+@keyframes ring{0%{opacity:.55;transform:scale(1)}100%{opacity:0;transform:scale(1.7)}}
+#ptt{position:relative;z-index:1;width:84px;height:84px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;display:grid;place-items:center;box-shadow:0 6px 18px rgba(15,92,77,.28);transition:transform .15s,box-shadow .15s,background .2s}
+#ptt:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 22px rgba(15,92,77,.32)}#ptt:active:not(:disabled){transform:scale(.96)}
+#ptt:disabled{background:var(--line);color:var(--mute);box-shadow:none;cursor:not-allowed}.rec #ptt{background:var(--neg)}
+#ptt svg{width:30px;height:30px}
+.bars{display:flex;gap:4px;justify-content:center;align-items:center;height:22px;margin:10px 0 2px;opacity:0;transition:opacity .2s}
+.speaking .bars{opacity:1}.bars i{width:4px;height:6px;border-radius:2px;background:var(--gold);animation:bar 1s ease-in-out infinite}
+.bars i:nth-child(2){animation-delay:.15s}.bars i:nth-child(3){animation-delay:.3s}.bars i:nth-child(4){animation-delay:.45s}.bars i:nth-child(5){animation-delay:.6s}
+@keyframes bar{0%,100%{height:5px}50%{height:20px}}
+.hint{font-size:13px;color:var(--mute);min-height:20px}
+.controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.btn{font:600 14px system-ui;padding:10px 20px;border-radius:999px;border:1px solid transparent;cursor:pointer;transition:transform .15s,background .2s,box-shadow .2s,border-color .2s;display:inline-flex;gap:8px;align-items:center}
+.btn:focus-visible,#ptt:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 40%,transparent);outline-offset:2px}
+.primary{background:var(--ink);color:var(--bg)}.primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 16px rgba(27,31,42,.2)}
+.ghost{background:transparent;border-color:var(--line);color:var(--ink)}.ghost:hover:not(:disabled){border-color:var(--ink)}
+.danger{background:transparent;border-color:var(--neg);color:var(--neg)}.danger:hover:not(:disabled){background:var(--neg);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+select{font:14px system-ui;padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+#log{padding:16px 18px;height:340px;overflow:auto;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);scroll-behavior:smooth}
+.empty{margin:auto;color:var(--mute);text-align:center;font-family:var(--serif);font-size:17px}
+.msg{padding:10px 14px;border-radius:16px;max-width:82%;animation:rise .35s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.user{align-self:flex-end;background:var(--ink);color:var(--bg);border-bottom-right-radius:4px}
+.bot{align-self:flex-start;background:var(--bg);border:1px solid var(--line);border-bottom-left-radius:4px}
+.typing{display:flex;gap:5px;padding:14px}.typing i{width:7px;height:7px;border-radius:50%;background:var(--mute);animation:dot 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}@keyframes dot{0%,60%,100%{opacity:.3;transform:none}30%{opacity:1;transform:translateY(-4px)}}
+form{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
+input{flex:1;font:14px system-ui;padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.side{display:grid;gap:18px;align-content:start}.panel{padding:18px 20px}
+.score{display:flex;align-items:center;gap:16px}
+.ring{position:relative;width:88px;height:88px;flex:none}.ring svg{transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:7}.ring .bg{stroke:var(--line)}.ring .fg{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:226;stroke-dashoffset:226;transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)}
+.ring b{position:absolute;inset:0;display:grid;place-items:center;font:600 24px var(--serif)}
+.score p{margin:0;color:var(--mute);font-size:13px}.score h3{margin:0 0 2px;font:500 18px var(--serif)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line);gap:10px}.row:first-of-type{margin-top:14px}
+.row span:first-child{color:var(--mute);font-size:13px}
+.chip{display:inline-block;padding:3px 11px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid var(--line);margin:2px 0 2px 4px}
+.pill{padding:3px 12px;border-radius:999px;font-size:13px;font-weight:600;color:#fff;background:var(--neu);transition:background .3s}
+.pill.positive{background:var(--pos)}.pill.negative{background:var(--neg)}
+.chips{text-align:right}
+#summary{padding:20px 22px;animation:rise .4s ease both}#summary h3{margin:0 0 8px;font:500 20px var(--serif)}#summary p{margin:0 0 10px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}.kv dt{color:var(--mute)}.kv dd{margin:0}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<header><div class="brand"><small>BrightPath Academy</small>Voice Counsellor</div><a href="/web/dashboard.html">Open dashboard →</a></header>
+<main>
+ <section class="card" id="call">
+  <div class="stage" id="stage">
+   <div class="eyebrow">Live call</div>
+   <div id="status">Ready when you are</div>
+   <div class="mic"><button id="ptt" disabled aria-label="Talk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></div>
+   <div class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+   <div class="hint" id="hint">Start the call, then tap the microphone to talk.</div>
+   <div class="controls">
+    <button class="btn primary" id="start">Start call</button>
+    <select id="lang" aria-label="Language"><option value="">Auto language</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option></select>
+    <button class="btn danger" id="end" disabled>End call</button>
+   </div>
+  </div>
+  <div id="log"><div class="empty">Your conversation will appear here.</div></div>
+  <form id="tf"><input id="txt" placeholder="Or type your message…" disabled autocomplete="off"><button class="btn ghost" id="send" disabled>Send</button></form>
+ </section>
+ <aside class="side">
+  <section class="card panel">
+   <div class="score"><div class="ring"><svg width="88" height="88" viewBox="0 0 88 88"><circle class="bg" cx="44" cy="44" r="36"/><circle class="fg" id="fill" cx="44" cy="44" r="36"/></svg><b id="score">0</b></div>
+    <div><h3>Lead score</h3><p>Computed by rules, not by the AI.</p></div></div>
+   <div class="row"><span>Caller sentiment</span><span id="sent" class="pill">–</span></div>
+   <div class="row"><span>Intent</span><b id="intent">–</b></div>
+   <div class="row"><span>Tools used</span><span class="chips" id="tools">–</span></div>
+   <div class="row"><span>Answered from</span><span class="chips" id="src">–</span></div>
+  </section>
+  <section class="card" id="summary" hidden></section>
+ </aside>
+</main>
+<script>
+const $=id=>document.getElementById(id);let sid=null,rec=null,chunks=[],busy=false,typingEl=null;
+const CIRC=226;
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
+function add(who,text){const e=$("log").querySelector(".empty");if(e)e.remove();$("log").append(el("div","msg "+who,text));$("log").scrollTop=1e9}
+function status(t,h){$("status").textContent=t;if(h!==undefined)$("hint").textContent=h}
 function ui(on){$("ptt").disabled=$("end").disabled=$("txt").disabled=$("send").disabled=!on}
+function typing(on){if(on&&!typingEl){typingEl=el("div","msg bot typing");typingEl.append(el("i"),el("i"),el("i"));$("log").append(typingEl);$("log").scrollTop=1e9}
+ if(!on&&typingEl){typingEl.remove();typingEl=null}}
+function chips(id,list){const t=$(id);t.replaceChildren();if(!list.length){t.textContent="–";return}list.forEach(x=>t.append(el("span","chip",x.replace(/_/g," "))))}
+function setScore(n){$("score").textContent=n;$("fill").style.strokeDashoffset=CIRC-CIRC*n/100}
 function speak(r){ // server mp3 if present, else browser speech synthesis (architecture 17)
- if(r.audio_b64){new Audio("data:"+r.audio_mime+";base64,"+r.audio_b64).play().catch(()=>{})}
+ if(r.audio_b64){const a=new Audio("data:"+r.audio_mime+";base64,"+r.audio_b64);const st=$("stage");
+  a.onplay=()=>st.classList.add("speaking");a.onended=a.onerror=()=>st.classList.remove("speaking");a.play().catch(()=>st.classList.remove("speaking"))}
  else if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(r.reply);u.lang={hi:"hi-IN",pa:"pa-IN",en:"en-IN"}[r.language]||"en-IN";speechSynthesis.speak(u)}}
 async function api(path,body){const r=await fetch(path,{method:"POST",body});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||e.error||r.status)}return r.json()}
-$("start").onclick=async()=>{try{status("starting…");const r=await api("/api/session",new Blob([JSON.stringify({language:$("lang").value||null})],{type:"application/json"}));
- sid=r.session_id;$("log").innerHTML="";$("summary").hidden=true;add("bot",r.reply);speak(r);ui(true);$("start").disabled=true;status("call active")}catch(e){status("Error: "+e.message)}};
-function show(r){if(r.transcript)add("user",r.transcript);add("bot",r.reply);speak(r);
- $("sent").textContent=r.sentiment;$("sent").className="pill "+r.sentiment;$("intent").textContent=r.intent;$("score").textContent=r.score;$("fill").style.width=r.score+"%";
- $("tools").textContent=r.tools_used.join(", ")||"–";$("src").textContent=r.sources.join(", ")||"–";
- if(r.limit_reached)$("end").click()}
-async function turn(fd){if(busy)return;busy=true;status("thinking…");fd.append("session_id",sid);if($("lang").value)fd.append("language",$("lang").value);
- try{show(await api("/api/turn",fd));status("your turn")}catch(e){status("Error: "+e.message)}busy=false}
-$("tf").onsubmit=e=>{e.preventDefault();const t=$("txt").value.trim();if(!t)return;$("txt").value="";const fd=new FormData();fd.append("text",t);turn(fd)};
+$("start").onclick=async()=>{try{status("Connecting…");const r=await api("/api/session",new Blob([JSON.stringify({language:$("lang").value||null})],{type:"application/json"}));
+ sid=r.session_id;$("log").replaceChildren();$("summary").hidden=true;setScore(0);add("bot",r.reply);speak(r);ui(true);$("start").disabled=true;status("Your turn","Tap the microphone, speak, then tap again to send.")}
+ catch(e){status("Couldn't start",e.message)}};
+function show(r){typing(false);if(r.transcript)add("user",r.transcript);add("bot",r.reply);speak(r);
+ $("sent").textContent=r.sentiment;$("sent").className="pill "+r.sentiment;$("intent").textContent=r.intent.replace(/_/g," ");setScore(r.score);
+ chips("tools",r.tools_used);chips("src",r.sources);if(r.limit_reached)$("end").click()}
+async function turn(fd,userText){if(busy)return;busy=true;status("Thinking…","");if(userText)add("user",userText);typing(true);fd.append("session_id",sid);if($("lang").value)fd.append("language",$("lang").value);
+ try{if(userText){const t=$("log").querySelectorAll(".user");const mine=t[t.length-1];const r=await api("/api/turn",fd);mine.remove();show(r)}else show(await api("/api/turn",fd));status("Your turn","Tap the microphone to reply.")}
+ catch(e){typing(false);status("Something went wrong",e.message)}busy=false}
+$("tf").onsubmit=e=>{e.preventDefault();const t=$("txt").value.trim();if(!t)return;$("txt").value="";const fd=new FormData();fd.append("text",t);turn(fd,t)};
 $("ptt").onclick=async()=>{
  if(rec){rec.stop();return}
  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];rec=new MediaRecorder(stream);
   rec.ondataavailable=e=>chunks.push(e.data);
-  rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:rec.mimeType||"audio/webm"});rec=null;$("ptt").textContent="🎤 Click to talk";$("ptt").classList.remove("rec");
+  rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:rec.mimeType||"audio/webm"});rec=null;$("stage").classList.remove("rec");
    const fd=new FormData();fd.append("audio",blob,"audio.webm");turn(fd)};
-  rec.start();$("ptt").textContent="⏹ Click to stop";$("ptt").classList.add("rec");status("listening…")}catch(e){status("Mic unavailable: use the text box")}};
-$("end").onclick=async()=>{try{status("summarising…");const fd=new FormData();fd.append("session_id",sid);const r=await api("/api/end_call",fd);ui(false);$("start").disabled=false;
- const s=$("summary");s.hidden=false;s.replaceChildren();const h=document.createElement("h3");h.textContent="Call summary";const p=document.createElement("p");p.textContent=r.summary;
- const i=document.createElement("p");i.className="meta";i.textContent=`Sentiment: ${r.overall_sentiment} · Final score: ${r.final_score} · Interest: ${r.insights.interest_level} · Next: ${r.insights.next_best_action} · Objections: ${(r.insights.objections||[]).join("; ")||"none"}`;
- s.append(h,p,i);status("call ended")}catch(e){status("Error: "+e.message)}};
+  rec.start();$("stage").classList.add("rec");status("Listening…","Tap the microphone again when you're done.")}
+ catch(e){status("Microphone unavailable","Allow mic access, or use the text box below.")}};
+$("end").onclick=async()=>{try{status("Wrapping up…","");const fd=new FormData();fd.append("session_id",sid);const r=await api("/api/end_call",fd);ui(false);$("start").disabled=false;
+ const s=$("summary");s.hidden=false;s.replaceChildren();s.append(el("h3",null,"Call summary"),el("p",null,r.summary||"No summary available."));
+ const kv=el("dl","kv");[["Sentiment",r.overall_sentiment],["Final score",r.final_score+"/100"],["Interest",r.insights.interest_level],["Next step",r.insights.next_best_action],["Objections",(r.insights.objections||[]).join("; ")||"none"]]
+  .forEach(([k,v])=>kv.append(el("dt",null,k),el("dd",null,String(v??"–"))));s.append(kv);status("Call ended","Start a new call any time. The lead is on the dashboard.")}
+ catch(e){status("Couldn't end call",e.message)}};
 </script></body></html>
