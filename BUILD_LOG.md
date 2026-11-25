@@ -1,22 +1,22 @@
 # BUILD_LOG
 
-Last updated after Stage 4. **No `GROQ_API_KEY` was available during the build**, so everything that calls Groq (LLM, STT) was verified only with mocks. Run `scripts/smoke_test.py` and one live conversation once the key is in `.env` (see section 5).
+Last updated after the first live run with a real `GROQ_API_KEY`. Verified live (2026-11-25): a 4-turn scripted conversation (English + Hindi, RAG, lead save, slot check, booking, summary; ~2-3 s/turn) and the audio path (edge-tts-generated Hindi and English speech → Whisper → agent → TTS) through `POST /api/turn`. Not verified live: mic recording in a real browser.
 
 ## 1. Status checklist
 
 | Feature | Status | Verified by |
 |---|---|---|
-| Text agent loop with tool calling | 🟡 code complete; live Groq call not run | `tests/test_agent.py::test_end_to_end_booking_with_mocked_llm`, `test_tool_loop_is_capped` |
-| STT (Groq Whisper, language normalised) | 🟡 code complete; live call not run | `tests/test_api.py::test_voice_fallback_and_language_normalisation`, `test_stt_failure_asks_to_repeat` (mocked) |
+| Text agent loop with tool calling | ✅ live (gpt-oss-120b) | live scripted conversation ending in booking, score 100; `tests/test_agent.py` (mocked) |
+| STT (Groq Whisper, language normalised) | ✅ live with synthesised speech (hi, en); not tried with a real microphone | `POST /api/turn` with mp3 returned correct transcripts and language; mocked tests in `tests/test_api.py` |
 | TTS (edge-tts, voice map from live list) | ✅ | live run: `scripts/smoke_test.py` voices check and a real mp3 returned by `POST /api/session` |
 | Contextual memory (history + rolling summary + lead context) | ✅ (mocked LLM) | `test_rolling_summary`; lead facts re-injected each turn by `_lead_context` |
 | Multilingual | 🟡 Hindi/English RAG + voices verified; Punjabi has no edge-tts voice (falls back to Hindi voice); STT language not tested live | `test_rag_hindi_fee`, smoke test voices (`pa_native: False`) |
 | Lead qualification + deterministic score | ✅ | `test_score_rubric`, `test_score_updates_after_booking`, `test_lead_upsert_keeps_old_fields` |
-| Sentiment analysis (per-turn, from LLM JSON) | 🟡 parsing verified; real model output not seen | `test_parse_output_variants`, `test_json_parse_fallback` |
+| Sentiment analysis (per-turn, from LLM JSON) | ✅ live output seen (neutral/positive); not calibrated on negative calls | `test_parse_output_variants`, `test_json_parse_fallback` |
 | RAG (Chroma + fastembed, threshold) | ✅ | `test_rag_english_fee`, `test_rag_hindi_fee`, `test_rag_miss`, `test_chunking_overlap` |
 | Appointment booking (no double booking) | ✅ | `test_double_booking_blocked`, `test_unique_constraint_is_the_safety_net` |
 | CRM integration | 🟡 adapter + local table + optional webhook; webhook never exercised against a real CRM | `test_lead_upsert_keeps_old_fields` (checks `crm_id`) |
-| Call summary and insights | 🟡 stored and shown; LLM-generated summary only mocked/fallback-tested | `test_end_to_end_booking_with_mocked_llm`, `test_full_flow_text` |
+| Call summary and insights | ✅ live summary + objections + next action generated and stored | `test_end_to_end_booking_with_mocked_llm`, `test_full_flow_text` |
 | Web UI (push-to-talk + text box) and dashboard | 🟡 served and API-tested; mic recording **not tested in a browser** | `curl` of `/web/dashboard.html` = 200; `tests/test_api.py` |
 | Scalability design | 📐 documented in README, not built | README "Scalability" |
 | Docker | ⬜ not done (optional) | none |
@@ -60,12 +60,13 @@ Last updated after Stage 4. **No `GROQ_API_KEY` was available during the build**
 - Added `messages.intent` so "asked about pricing/enrolment" can feed the score; added `app/security.py` (not in the §12 layout) to keep `main.py` small.
 - Chroma rejected the collection name `kb` (min 3 chars); renamed to `knowledge_base`.
 - Port 8000 was already in use on this machine; tested on 8010.
-- Default LLM `llama-3.3-70b-versatile` is an assumption: not checked against Groq's live model list (needs the key). `smoke_test.py` prints whether it is listed.
+- Default LLM `openai/gpt-oss-120b` is an assumption: not checked against Groq's live model list (needs the key). `smoke_test.py` prints whether it is listed.
 - Docker skipped; the master prompt allows that if everything else comes first.
 
 ## 5. Known limitations (honest)
 
-- **Live Groq paths untested** (LLM tool calling, Whisper, real JSON output). First live run may need prompt/schema tweaks.
+- Free-tier Groq limits (8,000 tokens/min per model) can cause fallback replies if many turns run quickly; each turn uses roughly 1.5-2k tokens.
+- Retrieval returns most of the 4-chunk KB for any question (tiny KB, loose 0.35 threshold), so the "sources" list is broad.
 - Mic recording and playback not tested in a real browser.
 - Punjabi: no edge-tts Punjabi voice (Hindi voice used); Whisper Punjabi accuracy is weaker; Hinglish may confuse detection (use the language pin).
 - Turn-based, not streaming. In-memory sessions and rate limits (lost on restart, single process). SQLite and local Chroma. CRM webhook is a stub.
@@ -80,7 +81,7 @@ Streaming (WebRTC/WebSocket, VAD, barge-in); telephony (Twilio/Exotel into the s
 
 ```bash
 cd ~/sales-voice-agent
-echo 'GROQ_API_KEY=your_key' > .env
+# put GROQ_API_KEY in .env (never in .env.example)
 .venv/bin/python scripts/seed_slots.py && .venv/bin/python scripts/ingest.py
 .venv/bin/python scripts/smoke_test.py      # first check with the key
 .venv/bin/python -m pytest -q

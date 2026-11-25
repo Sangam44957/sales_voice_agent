@@ -111,3 +111,15 @@ def test_rolling_summary(sess, monkeypatch):
     script(monkeypatch, [final("ok"), {"content": "Caller named Asha wants data science.", "tool_calls": []}])
     agent.run_turn(sess.id, "hi")
     assert sess.summary.startswith("Caller named Asha") and len(sess.history) <= agent.config.HISTORY_LIMIT
+
+
+def test_script_overrides_llm_language_label():
+    assert agent.parse_output('{"reply":"फीस चालीस हजार है","language":"en"}')["language"] == "hi"
+    assert agent.parse_output('{"reply":"ਫੀਸ ਚਾਲੀ ਹਜ਼ਾਰ ਹੈ","language":"en"}')["language"] == "pa"
+    assert agent.parse_output('{"reply":"Forty thousand","language":"hi"}')["language"] == "hi"  # no script -> trust the label
+
+
+def test_fake_json_tool_call_wrapper_is_unwrapped():
+    raw = '{"name": "json", "arguments": {"reply":"Sixty thousand rupees.","language":"en","sentiment":"positive","intent":"pricing_question"}}'
+    r = agent.parse_output(raw)
+    assert r["reply"] == "Sixty thousand rupees." and r["intent"] == "pricing_question"

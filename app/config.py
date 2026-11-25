@@ -15,7 +15,9 @@ def _env(name: str, default: str) -> str:
 
 
 GROQ_API_KEY = _env("GROQ_API_KEY", "")
-LLM_MODEL = _env("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
+LLM_MODEL = _env("GROQ_LLM_MODEL", "openai/gpt-oss-120b")
+LLM_FALLBACK_MODEL = _env("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")  # used on the retry: separate per-model rate limit
+LLM_REASONING = _env("GROQ_REASONING_EFFORT", "low")  # only sent to gpt-oss models
 STT_MODEL = _env("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
