@@ -1,0 +1,11 @@
+flowchart LR
+    U[Prospect] -->|speaks / types| W[Web client<br/>MediaRecorder + audio player]
+    W -->|audio or text + session_id| API[FastAPI<br/>rate limit, validation]
+    API --> STT[Groq Whisper STT]
+    API --> AG[Agent loop<br/>Groq LLM + tools, max 4 rounds]
+    AG --> T1[search_knowledge] --> RAG[(Chroma + fastembed<br/>multilingual)]
+    AG --> T2[check_slots / book_appointment / save_lead] --> DB[(SQLite<br/>leads, slots, appointments,<br/>messages, summaries)]
+    T2 -.-> CRM[CRM adapter<br/>local + webhook]
+    API --> TTS[edge-tts]
+    DB --> DASH[Dashboard]
+    API -->|reply text + mp3 + analytics| W

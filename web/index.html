@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Sales Voice Agent</title>
+<style>
+ body{font:15px system-ui,sans-serif;margin:0;background:#f4f5f7;color:#1c1e21}
+ main{max-width:860px;margin:0 auto;padding:16px;display:grid;gap:12px}
+ .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 3px #0002}
+ #log{height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+ .msg{padding:8px 12px;border-radius:12px;max-width:80%}.user{background:#dbeafe;align-self:flex-end}.bot{background:#eceff1}
+ .meta{font-size:12px;color:#667}button,select,input{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid #bbb}
+ button{cursor:pointer;background:#1d4ed8;color:#fff;border:0}button:disabled{background:#9aa}button.rec{background:#dc2626}
+ .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pill{padding:2px 10px;border-radius:99px;font-weight:600}
+ .positive{background:#dcfce7}.neutral{background:#e5e7eb}.negative{background:#fee2e2}
+ #bar{height:10px;background:#e5e7eb;border-radius:5px}#fill{height:100%;width:0;background:#16a34a;border-radius:5px;transition:width .4s}
+</style></head><body><main>
+<div class="card"><h2 style="margin:0 0 8px">AI Sales Voice Agent <a href="/web/dashboard.html" style="font-size:13px">dashboard</a></h2>
+ <div class="row">
+  <button id="start">Start call</button>
+  <select id="lang" title="Pin language"><option value="">Auto language</option><option value="en">English</option><option value="hi">हिन्दी</option><option value="pa">ਪੰਜਾਬੀ</option></select>
+  <button id="ptt" disabled>🎤 Click to talk</button>
+  <button id="end" disabled style="background:#475569">End call</button>
+  <span id="status" class="meta"></span></div></div>
+<div class="card"><div id="log"></div>
+ <form id="tf" class="row" style="margin-top:8px"><input id="txt" placeholder="…or type here (fallback)" style="flex:1" disabled><button disabled id="send">Send</button></form></div>
+<div class="card row"><div>Sentiment: <span id="sent" class="pill neutral">–</span></div><div>Intent: <b id="intent">–</b></div>
+ <div style="flex:1;min-width:200px">Lead score: <b id="score">0</b>/100<div id="bar"><div id="fill"></div></div></div>
+ <div class="meta">Tools: <span id="tools">–</span> · Sources: <span id="src">–</span></div></div>
+<div class="card" id="summary" hidden></div>
+</main><script>
+const $=id=>document.getElementById(id);let sid=null,rec=null,chunks=[],busy=false;
+function add(who,text){const d=document.createElement("div");d.className="msg "+who;d.textContent=text;$("log").append(d);$("log").scrollTop=1e9}
+function status(t){$("status").textContent=t}
+function ui(on){$("ptt").disabled=$("end").disabled=$("txt").disabled=$("send").disabled=!on}
+function speak(r){ // server mp3 if present, else browser speech synthesis (architecture 17)
+ if(r.audio_b64){new Audio("data:"+r.audio_mime+";base64,"+r.audio_b64).play().catch(()=>{})}
+ else if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(r.reply);u.lang={hi:"hi-IN",pa:"pa-IN",en:"en-IN"}[r.language]||"en-IN";speechSynthesis.speak(u)}}
+async function api(path,body){const r=await fetch(path,{method:"POST",body});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||e.error||r.status)}return r.json()}
+$("start").onclick=async()=>{try{status("starting…");const r=await api("/api/session",new Blob([JSON.stringify({language:$("lang").value||null})],{type:"application/json"}));
+ sid=r.session_id;$("log").innerHTML="";$("summary").hidden=true;add("bot",r.reply);speak(r);ui(true);$("start").disabled=true;status("call active")}catch(e){status("Error: "+e.message)}};
+function show(r){if(r.transcript)add("user",r.transcript);add("bot",r.reply);speak(r);
+ $("sent").textContent=r.sentiment;$("sent").className="pill "+r.sentiment;$("intent").textContent=r.intent;$("score").textContent=r.score;$("fill").style.width=r.score+"%";
+ $("tools").textContent=r.tools_used.join(", ")||"–";$("src").textContent=r.sources.join(", ")||"–";
+ if(r.limit_reached)$("end").click()}
+async function turn(fd){if(busy)return;busy=true;status("thinking…");fd.append("session_id",sid);if($("lang").value)fd.append("language",$("lang").value);
+ try{show(await api("/api/turn",fd));status("your turn")}catch(e){status("Error: "+e.message)}busy=false}
+$("tf").onsubmit=e=>{e.preventDefault();const t=$("txt").value.trim();if(!t)return;$("txt").value="";const fd=new FormData();fd.append("text",t);turn(fd)};
+$("ptt").onclick=async()=>{
+ if(rec){rec.stop();return}
+ try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];rec=new MediaRecorder(stream);
+  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:rec.mimeType||"audio/webm"});rec=null;$("ptt").textContent="🎤 Click to talk";$("ptt").classList.remove("rec");
+   const fd=new FormData();fd.append("audio",blob,"audio.webm");turn(fd)};
+  rec.start();$("ptt").textContent="⏹ Click to stop";$("ptt").classList.add("rec");status("listening…")}catch(e){status("Mic unavailable: use the text box")}};
+$("end").onclick=async()=>{try{status("summarising…");const fd=new FormData();fd.append("session_id",sid);const r=await api("/api/end_call",fd);ui(false);$("start").disabled=false;
+ const s=$("summary");s.hidden=false;s.replaceChildren();const h=document.createElement("h3");h.textContent="Call summary";const p=document.createElement("p");p.textContent=r.summary;
+ const i=document.createElement("p");i.className="meta";i.textContent=`Sentiment: ${r.overall_sentiment} · Final score: ${r.final_score} · Interest: ${r.insights.interest_level} · Next: ${r.insights.next_best_action} · Objections: ${(r.insights.objections||[]).join("; ")||"none"}`;
+ s.append(h,p,i);status("call ended")}catch(e){status("Error: "+e.message)}};
+</script></body></html>

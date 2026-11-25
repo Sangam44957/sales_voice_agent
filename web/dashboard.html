@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sales Dashboard</title>
+<style>
+ body{font:14px system-ui,sans-serif;margin:0;background:#f4f5f7;color:#1c1e21}main{max-width:1100px;margin:0 auto;padding:16px}
+ table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px #0002;margin-bottom:20px}
+ th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #eee;vertical-align:top}th{background:#1e293b;color:#fff}
+ .pill{padding:2px 8px;border-radius:99px}.positive{background:#dcfce7}.neutral{background:#e5e7eb}.negative{background:#fee2e2}
+ .cards{display:flex;gap:12px;margin-bottom:16px}.k{background:#fff;padding:12px 18px;border-radius:8px;box-shadow:0 1px 3px #0002}.k b{font-size:24px;display:block}
+</style></head><body><main>
+<h2>Sales dashboard <a href="/web/index.html" style="font-size:13px">call UI</a></h2>
+<div class="cards" id="kpi"></div>
+<h3>Leads</h3><table id="leads"></table><h3>Calls &amp; summaries</h3><table id="calls"></table><h3>Slots</h3><table id="slots"></table>
+</main><script>
+// All cell values are inserted with textContent: caller speech is untrusted and must never be parsed as HTML.
+function table(id,cols,rows){const t=document.getElementById(id);t.replaceChildren();const h=t.insertRow();cols.forEach(c=>{const th=document.createElement("th");th.textContent=c[0];h.append(th)});
+ rows.forEach(r=>{const tr=t.insertRow();cols.forEach(c=>{const td=tr.insertCell();const v=c[1](r);if(v&&v.pill){const s=document.createElement("span");s.className="pill "+v.pill;s.textContent=v.pill;td.append(s)}else td.textContent=v??""})})}
+const j=u=>fetch(u).then(r=>r.json());
+async function load(){const [L,C,S]=await Promise.all([j("/api/leads"),j("/api/calls"),j("/api/slots")]);
+ const k=document.getElementById("kpi");k.replaceChildren();[["Leads",L.length],["Booked",L.filter(l=>l.appointment).length],["Avg score",L.length?Math.round(L.reduce((a,l)=>a+l.score,0)/L.length):0],["Calls",C.length]].forEach(([n,v])=>{const d=document.createElement("div");d.className="k";const b=document.createElement("b");b.textContent=v;d.append(b,n);k.append(d)});
+ table("leads",[["Name",r=>r.name],["Phone",r=>r.phone],["Interest",r=>r.interest],["Budget",r=>r.budget],["Timeline",r=>r.timeline],["Score",r=>r.score],["Stage",r=>r.stage],["Appointment",r=>r.appointment],["CRM id",r=>r.crm_id]],L);
+ table("calls",[["Started",r=>r.started_at],["Lang",r=>r.language],["Lead",r=>r.name],["Status",r=>r.status],["Sentiment",r=>r.overall_sentiment?{pill:r.overall_sentiment}:""],["Score",r=>r.final_score],["Summary",r=>r.summary],["Next action",r=>r.insights_json?JSON.parse(r.insights_json).next_best_action:""]],C);
+ table("slots",[["Slot",r=>r.id],["Time",r=>r.start_time],["Booked",r=>r.is_booked?"yes":"no"]],S)}
+load();setInterval(load,5000);
+</script></body></html>

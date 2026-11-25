@@ -107,3 +107,14 @@ def test_chunking_overlap():
     text = "\n\n".join(f"paragraph {i} " + "x" * 300 for i in range(8))
     chunks = rag.chunk_text(text, size=700, overlap=100)
     assert len(chunks) > 1 and chunks[1].startswith(chunks[0][-100:])
+
+
+def test_purge_removes_old_sessions_and_frees_slot(fresh_db):
+    import sys
+    sys.path.insert(0, str(config.ROOT / "scripts"))
+    import purge
+    book("s1")
+    assert purge.purge(days=-1) == 2  # cutoff in the future -> everything is "old"
+    with db.connect() as c:
+        assert c.execute("SELECT COUNT(*) n FROM leads").fetchone()["n"] == 0
+        assert c.execute("SELECT is_booked FROM slots WHERE id=1").fetchone()["is_booked"] == 0
