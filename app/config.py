@@ -51,11 +51,12 @@ RATE_SESSION_PER_MIN = int(_env("RATE_SESSION_PER_MIN", "20"))
 # Data retention: scripts/purge.py deletes sessions older than this many days
 RETENTION_DAYS = int(_env("RETENTION_DAYS", "30"))
 
-CONSENT_GREETING = (
-    f"Hello, this is the AI assistant for {BUSINESS_NAME}. "
-    "This call is handled by an AI and your details are saved to arrange follow-up; "
-    "by continuing you agree to this. How can I help you today?"
-)
+GREETINGS = {
+    "en": f"Hello, this is the AI assistant for {BUSINESS_NAME}. This call is handled by an AI and your details are saved to arrange follow-up; by continuing you agree to this. How can I help you today?",
+    "hi": f"नमस्ते, मैं {BUSINESS_NAME} का AI सहायक हूँ। यह कॉल AI द्वारा संभाली जा रही है और फ़ॉलो-अप के लिए आपकी जानकारी सहेजी जाएगी; जारी रखकर आप इससे सहमत हैं। मैं आपकी क्या मदद कर सकता हूँ?",
+    "pa": f"ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਮੈਂ {BUSINESS_NAME} ਦਾ AI ਸਹਾਇਕ ਹਾਂ। ਇਹ ਕਾਲ AI ਦੁਆਰਾ ਸੰਭਾਲੀ ਜਾ ਰਹੀ ਹੈ ਅਤੇ ਫਾਲੋ-ਅਪ ਲਈ ਤੁਹਾਡੀ ਜਾਣਕਾਰੀ ਸੁਰੱਖਿਅਤ ਕੀਤੀ ਜਾਵੇਗੀ; ਜਾਰੀ ਰੱਖ ਕੇ ਤੁਸੀਂ ਇਸ ਨਾਲ ਸਹਿਮਤ ਹੋ। ਮੈਂ ਤੁਹਾਡੀ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?",
+}
+CONSENT_GREETING = GREETINGS["en"]
 
 _PHONE = re.compile(r"\+?\d[\d\s-]{6,}\d")
 

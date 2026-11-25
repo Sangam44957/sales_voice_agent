@@ -18,7 +18,7 @@ REPEAT_REPLY = "Sorry, I didn't catch that. Could you repeat that?"
 SYSTEM_PROMPT = """You are a friendly voice sales assistant for {business}, an education-counselling institute. This is a PHONE CALL.
 RULES
 1. Reply in 1-3 short spoken sentences. No bullet points, no markdown, no emojis, no long lists. Say numbers naturally.
-2. Reply in the language the caller used in their last message (English, Hindi or Punjabi).
+2. Reply in the language the caller used in their last message (English, Hindi or Punjabi). Write Hindi ONLY in Devanagari script and Punjabi ONLY in Gurmukhi script, never in Roman letters (the voice cannot read romanised text); numbers may be written in words in that script.
 3. State facts about courses, fees, admissions or policies ONLY from search_knowledge results. If nothing relevant is found, say you don't have that information and offer a callback. Never invent prices.
 4. Naturally collect name, interest, budget, timeline and phone, ONE question at a time. Call save_lead whenever the caller gives new details (only fields they actually stated).
 5. Once the caller shows interest, offer a free counselling appointment. Call check_slots before proposing times. Call book_appointment ONLY after the caller clearly confirms a specific slot and you have their name and phone.
@@ -38,6 +38,7 @@ class Session:
     language: str = "en"
     history: list[dict] = field(default_factory=list)  # [{"role","content"}] verbatim recent turns
     summary: str = ""  # rolling summary of older turns
+    pinned: bool = False  # True when the caller chose a language in the UI: always reply in it
     turns: int = 0
     started: float = field(default_factory=time.time)
 
@@ -45,9 +46,9 @@ class Session:
 SESSIONS: dict[str, Session] = {}
 
 
-def start_session(language: str = "en") -> Session:
+def start_session(language: str = "en", pinned: bool = False) -> Session:
     """Create a session in memory and in the DB."""
-    s = Session(id=uuid.uuid4().hex, language=language)
+    s = Session(id=uuid.uuid4().hex, language=language, pinned=pinned)
     SESSIONS[s.id] = s
     db.create_session(s.id, language)
     return s
@@ -83,12 +84,12 @@ def llm_call(messages: list[dict], tools_: list[dict] | None = None) -> dict:
 
 
 def script_language(text: str) -> str | None:
-    """Detect Hindi/Punjabi from the Unicode script of the reply (more reliable than the LLM's label; drives the TTS voice)."""
-    if re.search(r"[\u0900-\u097F]", text):
-        return "hi"
-    if re.search(r"[\u0A00-\u0A7F]", text):
-        return "pa"
-    return None
+    """Detect Hindi/Punjabi from the script of the reply's letters (drives the TTS voice). The danda '।' is shared by both scripts, so only letters are counted."""
+    deva = len(re.findall(r"[\u0904-\u0939\u093E-\u094D]", text))
+    gurm = len(re.findall(r"[\u0A05-\u0A39\u0A3E-\u0A4D]", text))
+    if deva == gurm == 0:
+        return None
+    return "hi" if deva > gurm else "pa"
 
 
 def parse_output(raw: str | None, default_lang: str = "en") -> dict:
@@ -126,7 +127,9 @@ def _lead_context(session_id: str) -> str:
 
 def _build_messages(s: Session, text: str) -> list[dict]:
     system = SYSTEM_PROMPT.format(business=config.BUSINESS_NAME)
-    system += f"\nToday is {datetime.now():%A %Y-%m-%d %H:%M}. Caller's detected language: {LANGS.get(s.language, s.language)}.\n{_lead_context(s.id)}"
+    lang = LANGS.get(s.language, s.language)
+    rule = f"The caller CHOSE {lang}: ALWAYS reply in {lang}, whatever language they speak.{' Use ONLY ' + ('Gurmukhi' if s.language == 'pa' else 'Devanagari') + ' script, no Roman letters.' if s.language in ('hi', 'pa') else ''}" if s.pinned else f"Caller's detected language: {lang}."
+    system += f"\nToday is {datetime.now():%A %Y-%m-%d %H:%M}. {rule}\n{_lead_context(s.id)}"
     if s.summary:
         system += f"\nSummary of earlier conversation: {s.summary}"
     return [{"role": "system", "content": system}, *s.history, {"role": "user", "content": text}]
@@ -150,6 +153,7 @@ def run_turn(session_id: str, text: str, language: str | None = None) -> dict:
     s = SESSIONS.get(session_id)
     if s is None:
         raise KeyError("unknown session")
+    s.pinned = language is not None  # the UI sends the pin every turn; no pin = auto-detect
     if language:
         s.language = language
     out = {"reply": "", "language": s.language, "sentiment": "neutral", "intent": "other", "sources": [], "tools_used": [], "limit_reached": False}

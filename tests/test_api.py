@@ -65,3 +65,17 @@ def test_voice_fallback_and_language_normalisation():
     assert tts.pick_voice(voices, "pa") == "hi-IN-SwaraNeural"  # Punjabi missing -> Hindi
     assert tts.pick_voice(voices, "en") == "en-IN-X"
     assert [stt.normalise_language(x) for x in ("hindi", "Punjabi", "en", None)] == ["hi", "pa", "en", "en"]
+
+
+def test_greeting_follows_pinned_language(client):
+    for lang in ("hi", "pa"):
+        r = client.post("/api/session", json={"language": lang}).json()
+        assert r["language"] == lang and r["reply"] == main.config.GREETINGS[lang]
+        assert agent.SESSIONS[r["session_id"]].pinned is True
+    assert client.post("/api/session").json()["language"] == "en"
+
+
+def test_pinned_language_in_prompt_and_punjabi_tts_script():
+    s = agent.Session(id="x", language="hi", pinned=True)
+    assert "ALWAYS reply in Hindi" in agent._build_messages(s, "hi")[0]["content"]
+    assert tts.gurmukhi_to_devanagari("ਸਤ ਸ੍ਰੀ ਅਕਾਲ") == "सत स्री अकाल"

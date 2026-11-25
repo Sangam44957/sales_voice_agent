@@ -123,3 +123,9 @@ def test_fake_json_tool_call_wrapper_is_unwrapped():
     raw = '{"name": "json", "arguments": {"reply":"Sixty thousand rupees.","language":"en","sentiment":"positive","intent":"pricing_question"}}'
     r = agent.parse_output(raw)
     assert r["reply"] == "Sixty thousand rupees." and r["intent"] == "pricing_question"
+
+
+def test_danda_does_not_confuse_script_detection():
+    assert agent.script_language("ਫੀਸ ਚਾਲੀ ਹਜ਼ਾਰ ਰੁਪਏ ਹੈ।") == "pa"
+    assert agent.script_language("फीस चालीस हज़ार रुपये है।") == "hi"
+    assert agent.script_language("Forty thousand rupees.") is None

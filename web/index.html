@@ -22,7 +22,7 @@ main{max-width:1080px;margin:0 auto;padding:14px 20px 40px;display:grid;grid-tem
 #ptt{position:relative;z-index:1;width:84px;height:84px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;display:grid;place-items:center;box-shadow:0 6px 18px rgba(15,92,77,.28);transition:transform .15s,box-shadow .15s,background .2s}
 #ptt:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 22px rgba(15,92,77,.32)}#ptt:active:not(:disabled){transform:scale(.96)}
 #ptt:disabled{background:var(--line);color:var(--mute);box-shadow:none;cursor:not-allowed}.rec #ptt{background:var(--neg)}
-#ptt svg{width:30px;height:30px}
+#ptt svg{width:30px;height:30px}#ptt .i-stop,.stoppable #ptt .i-mic,.rec #ptt .i-mic{display:none}.stoppable #ptt .i-stop,.rec #ptt .i-stop{display:block}.stoppable #ptt{background:var(--ink);color:var(--bg)}
 .bars{display:flex;gap:4px;justify-content:center;align-items:center;height:22px;margin:10px 0 2px;opacity:0;transition:opacity .2s}
 .speaking .bars{opacity:1}.bars i{width:4px;height:6px;border-radius:2px;background:var(--gold);animation:bar 1s ease-in-out infinite}
 .bars i:nth-child(2){animation-delay:.15s}.bars i:nth-child(3){animation-delay:.3s}.bars i:nth-child(4){animation-delay:.45s}.bars i:nth-child(5){animation-delay:.6s}
@@ -68,7 +68,7 @@ input{flex:1;font:14px system-ui;padding:10px 16px;border-radius:999px;border:1p
   <div class="stage" id="stage">
    <div class="eyebrow">Live call</div>
    <div id="status">Ready when you are</div>
-   <div class="mic"><button id="ptt" disabled aria-label="Talk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></div>
+   <div class="mic"><button id="ptt" disabled aria-label="Talk"><svg class="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><svg class="i-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg></button></div>
    <div class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
    <div class="hint" id="hint">Start the call, then tap the microphone to talk.</div>
    <div class="controls">
@@ -93,7 +93,7 @@ input{flex:1;font:14px system-ui;padding:10px 16px;border-radius:999px;border:1p
  </aside>
 </main>
 <script>
-const $=id=>document.getElementById(id);let sid=null,rec=null,chunks=[],busy=false,typingEl=null;
+const $=id=>document.getElementById(id);let sid=null,rec=null,chunks=[],busy=false,typingEl=null,audio=null,ctrl=null;
 const CIRC=226;
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
 function add(who,text){const e=$("log").querySelector(".empty");if(e)e.remove();$("log").append(el("div","msg "+who,text));$("log").scrollTop=1e9}
@@ -103,30 +103,41 @@ function typing(on){if(on&&!typingEl){typingEl=el("div","msg bot typing");typing
  if(!on&&typingEl){typingEl.remove();typingEl=null}}
 function chips(id,list){const t=$(id);t.replaceChildren();if(!list.length){t.textContent="–";return}list.forEach(x=>t.append(el("span","chip",x.replace(/_/g," "))))}
 function setScore(n){$("score").textContent=n;$("fill").style.strokeDashoffset=CIRC-CIRC*n/100}
+function mode(){ // the big button turns into Stop while the agent is thinking or speaking
+ const st=$("stage"),stoppable=!rec&&(busy||!!audio);st.classList.toggle("stoppable",stoppable);
+ $("ptt").setAttribute("aria-label",rec?"Send":stoppable?"Stop":"Talk")}
+function stopSpeech(){if(audio){audio.onended=audio.onerror=null;audio.pause();audio=null}
+ if(window.speechSynthesis)speechSynthesis.cancel();$("stage").classList.remove("speaking");mode()}
 function speak(r){ // server mp3 if present, else browser speech synthesis (architecture 17)
- if(r.audio_b64){const a=new Audio("data:"+r.audio_mime+";base64,"+r.audio_b64);const st=$("stage");
-  a.onplay=()=>st.classList.add("speaking");a.onended=a.onerror=()=>st.classList.remove("speaking");a.play().catch(()=>st.classList.remove("speaking"))}
+ stopSpeech();
+ if(r.audio_b64){const a=new Audio("data:"+r.audio_mime+";base64,"+r.audio_b64);const done=()=>{if(audio===a){audio=null;$("stage").classList.remove("speaking");mode()}};
+  audio=a;a.onplay=()=>$("stage").classList.add("speaking");a.onended=a.onerror=done;a.play().catch(done);mode()}
  else if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(r.reply);u.lang={hi:"hi-IN",pa:"pa-IN",en:"en-IN"}[r.language]||"en-IN";speechSynthesis.speak(u)}}
-async function api(path,body){const r=await fetch(path,{method:"POST",body});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||e.error||r.status)}return r.json()}
+function cancelTurn(){if(ctrl)ctrl.abort()}
+async function api(path,body,signal){const r=await fetch(path,{method:"POST",body,signal});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||e.error||r.status)}return r.json()}
 $("start").onclick=async()=>{try{status("Connecting…");const r=await api("/api/session",new Blob([JSON.stringify({language:$("lang").value||null})],{type:"application/json"}));
  sid=r.session_id;$("log").replaceChildren();$("summary").hidden=true;setScore(0);add("bot",r.reply);speak(r);ui(true);$("start").disabled=true;status("Your turn","Tap the microphone, speak, then tap again to send.")}
  catch(e){status("Couldn't start",e.message)}};
 function show(r){typing(false);if(r.transcript)add("user",r.transcript);add("bot",r.reply);speak(r);
  $("sent").textContent=r.sentiment;$("sent").className="pill "+r.sentiment;$("intent").textContent=r.intent.replace(/_/g," ");setScore(r.score);
  chips("tools",r.tools_used);chips("src",r.sources);if(r.limit_reached)$("end").click()}
-async function turn(fd,userText){if(busy)return;busy=true;status("Thinking…","");if(userText)add("user",userText);typing(true);fd.append("session_id",sid);if($("lang").value)fd.append("language",$("lang").value);
- try{if(userText){const t=$("log").querySelectorAll(".user");const mine=t[t.length-1];const r=await api("/api/turn",fd);mine.remove();show(r)}else show(await api("/api/turn",fd));status("Your turn","Tap the microphone to reply.")}
- catch(e){typing(false);status("Something went wrong",e.message)}busy=false}
+async function turn(fd,userText){if(busy)return;stopSpeech();busy=true;ctrl=new AbortController();mode();status("Thinking…","Tap the stop button to cancel.");let mine=null;
+ if(userText){add("user",userText);mine=$("log").lastChild}typing(true);fd.append("session_id",sid);if($("lang").value)fd.append("language",$("lang").value);
+ try{const r=await api("/api/turn",fd,ctrl.signal);if(mine)mine.remove();show(r);status("Your turn","Tap the microphone to reply.")}
+ catch(e){typing(false);if(e.name==="AbortError")status("Cancelled","Tap the microphone to try again.");else status("Something went wrong",e.message)}
+ busy=false;ctrl=null;mode()}
 $("tf").onsubmit=e=>{e.preventDefault();const t=$("txt").value.trim();if(!t)return;$("txt").value="";const fd=new FormData();fd.append("text",t);turn(fd,t)};
 $("ptt").onclick=async()=>{
- if(rec){rec.stop();return}
+ if(rec){rec.stop();return}                                   // recording -> send
+ if(audio){stopSpeech();status("Stopped","Tap the microphone to talk.");return}  // speaking -> stop
+ if(busy){cancelTurn();return}                                // thinking -> cancel
  try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];rec=new MediaRecorder(stream);
   rec.ondataavailable=e=>chunks.push(e.data);
-  rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:rec.mimeType||"audio/webm"});rec=null;$("stage").classList.remove("rec");
+  rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:rec.mimeType||"audio/webm"});rec=null;$("stage").classList.remove("rec");mode();
    const fd=new FormData();fd.append("audio",blob,"audio.webm");turn(fd)};
-  rec.start();$("stage").classList.add("rec");status("Listening…","Tap the microphone again when you're done.")}
+  rec.start();$("stage").classList.add("rec");mode();status("Listening…","Tap the microphone again when you're done.")}
  catch(e){status("Microphone unavailable","Allow mic access, or use the text box below.")}};
-$("end").onclick=async()=>{try{status("Wrapping up…","");const fd=new FormData();fd.append("session_id",sid);const r=await api("/api/end_call",fd);ui(false);$("start").disabled=false;
+$("end").onclick=async()=>{try{cancelTurn();stopSpeech();if(rec){const r0=rec;rec=null;r0.onstop=()=>r0.stream.getTracks().forEach(t=>t.stop());r0.stop();$("stage").classList.remove("rec")}status("Wrapping up…","");const fd=new FormData();fd.append("session_id",sid);const r=await api("/api/end_call",fd);ui(false);$("start").disabled=false;
  const s=$("summary");s.hidden=false;s.replaceChildren();s.append(el("h3",null,"Call summary"),el("p",null,r.summary||"No summary available."));
  const kv=el("dl","kv");[["Sentiment",r.overall_sentiment],["Final score",r.final_score+"/100"],["Interest",r.insights.interest_level],["Next step",r.insights.next_best_action],["Objections",(r.insights.objections||[]).join("; ")||"none"]]
   .forEach(([k,v])=>kv.append(el("dt",null,k),el("dd",null,String(v??"–"))));s.append(kv);status("Call ended","Start a new call any time. The lead is on the dashboard.")}

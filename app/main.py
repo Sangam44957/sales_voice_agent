@@ -88,9 +88,11 @@ def health() -> dict:
 @app.post("/api/session", response_model=SessionOut)
 async def start(request: Request, body: StartIn | None = None) -> SessionOut:
     security.ip_limiter.check(request.client.host)
-    lang = body.language if body and body.language in agent.LANGS else "en"
-    s = agent.start_session(lang)
-    return SessionOut(session_id=s.id, reply=config.CONSENT_GREETING, language="en", audio_b64=await _speak(config.CONSENT_GREETING, "en"))
+    pin = body.language if body and body.language in agent.LANGS else None
+    lang = pin or "en"
+    s = agent.start_session(lang, pinned=pin is not None)
+    greeting = config.GREETINGS[lang]
+    return SessionOut(session_id=s.id, reply=greeting, language=lang, audio_b64=await _speak(greeting, lang))
 
 
 @app.post("/api/turn", response_model=TurnOut)

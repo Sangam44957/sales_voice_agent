@@ -68,7 +68,7 @@ Last updated after the first live run with a real `GROQ_API_KEY`. Verified live 
 - Free-tier Groq limits (8,000 tokens/min per model) can cause fallback replies if many turns run quickly; each turn uses roughly 1.5-2k tokens.
 - Retrieval returns most of the 4-chunk KB for any question (tiny KB, loose 0.35 threshold), so the "sources" list is broad.
 - Mic recording and playback not tested in a real browser.
-- Punjabi: no edge-tts Punjabi voice (Hindi voice used); Whisper Punjabi accuracy is weaker; Hinglish may confuse detection (use the language pin).
+- Punjabi: no edge-tts Punjabi voice; the Hindi voice speaks it after Gurmukhi→Devanagari transliteration in `tts.gurmukhi_to_devanagari` (approximate accent, tested only by checking audio is produced); Whisper Punjabi accuracy is weaker; Hinglish may confuse detection (use the language pin).
 - Turn-based, not streaming. In-memory sessions and rate limits (lost on restart, single process). SQLite and local Chroma. CRM webhook is a stub.
 - Dashboard and `/api/leads` have no authentication (PII exposed); fine for a local demo only.
 - Timeline scoring uses a keyword regex, not real date understanding. Budget "matches offering" is simplified to "budget given".
