@@ -129,3 +129,21 @@ def test_danda_does_not_confuse_script_detection():
     assert agent.script_language("ਫੀਸ ਚਾਲੀ ਹਜ਼ਾਰ ਰੁਪਏ ਹੈ।") == "pa"
     assert agent.script_language("फीस चालीस हज़ार रुपये है।") == "hi"
     assert agent.script_language("Forty thousand rupees.") is None
+
+
+def test_end_of_call_backfills_only_missing_lead_fields(sess, monkeypatch):
+    agent.tools.run_tool(sess.id, "save_lead", {"name": "Asha", "interest": "web development"})
+    summary = {"summary": "s", "objections": [], "interest_level": "high", "next_best_action": "call", "overall_sentiment": "positive",
+               "lead": {"name": "WRONG", "phone": "९८७६५४३२१०", "interest": "other", "budget": "40000", "timeline": "next month"}}
+    db.add_message(sess.id, "user", "hi")
+    script(monkeypatch, [{"content": json.dumps(summary), "tool_calls": []}])
+    agent.summarize(sess.id)
+    with db.connect() as c:
+        lead = dict(c.execute("SELECT * FROM leads").fetchone())
+    assert (lead["name"], lead["interest"]) == ("Asha", "web development")  # not overwritten
+    assert (lead["phone"], lead["budget"], lead["timeline"]) == ("9876543210", "40000", "next month")  # filled, digits normalised
+    assert lead["score"] >= 70
+
+
+def test_missing_fields_are_shown_to_the_model(sess):
+    assert "Still missing: name, interest, budget, timeline, phone" in agent._lead_context(sess.id)

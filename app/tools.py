@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import sqlite3
+import unicodedata
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -43,6 +44,7 @@ class BookArgs(_Args):
     @field_validator("phone")
     @classmethod
     def _phone(cls, v: str) -> str:
+        v = "".join(str(unicodedata.digit(c)) if c.isdigit() else c for c in v)  # Devanagari/Gurmukhi digits -> 0-9
         v = re.sub(r"[\s-]", "", v)
         if not PHONE_RE.match(v):
             raise ValueError("phone must be 7-15 digits")
@@ -134,6 +136,17 @@ def save_lead(session_id: str, a: LeadArgs) -> dict:
     return {"saved": True, "score": score}
 
 
+def fill_missing_lead(session_id: str, a: LeadArgs) -> None:
+    """Backfill only EMPTY lead fields (used at end of call from the transcript); never overwrites what the agent saved."""
+    with db.connect() as c:
+        row = c.execute("SELECT * FROM leads WHERE session_id=?", (session_id,)).fetchone()
+        have = dict(row) if row else {}
+        gaps = {k: v for k, v in a.model_dump().items() if v and not have.get(k)}
+        if gaps:
+            _upsert_lead(c, session_id, gaps)
+    refresh_score(session_id)
+
+
 def book_appointment(session_id: str, a: BookArgs) -> dict:
     with db.connect() as c:
         c.execute("BEGIN IMMEDIATE")  # take the write lock so check+insert is atomic
@@ -161,7 +174,7 @@ def book_appointment(session_id: str, a: BookArgs) -> dict:
 REGISTRY = {
     "search_knowledge": (SearchArgs, search_knowledge, "Search the knowledge base for courses, fees, admissions and policies. Use before stating any fact."),
     "check_slots": (SlotsArgs, check_slots, "List free counselling appointment slots. Always call before proposing times."),
-    "save_lead": (LeadArgs, save_lead, "Create/update the caller's lead with details learned so far. Only pass fields the caller actually stated."),
+    "save_lead": (LeadArgs, save_lead, "Save the caller's details. Call it every time the caller states ANY of name, course interest, budget, timeline or phone; include every field known so far. Never invent values."),
     "book_appointment": (BookArgs, book_appointment, "Book a slot AFTER the caller has confirmed the time, with their name and phone."),
 }
 
