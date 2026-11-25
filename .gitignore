@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.db
+chroma_data/
+.pytest_cache/
+STAGES.md
+MASTER_PROMPT.md
+INTERVIEW_NOTES.md

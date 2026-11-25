@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+groq
+chromadb
+fastembed
+edge-tts
+python-dotenv
+pydantic
+httpx
+pytest
